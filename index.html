@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>English Speaking Practice App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f8ff;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 90%;
+      max-width: 400px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4caf50;
+      border: none;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      margin-right: 5px;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    #result {
+      margin-top: 20px;
+      font-weight: bold;
+      white-space: pre-wrap;
+    }
+
+    canvas {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗣️ English Speaking Practice</h1>
+    <p>Score: <span id="score">0</span>/<span id="total">0</span></p>
+
+    <p>Category:
+      <select id="categorySelect" onchange="changeCategory()">
+        <option value="general">General</option>
+        <option value="greetings">Greetings</option>
+        <option value="travel">Travel</option>
+        <option value="food">Food</option>
+      </select>
+    </p>
+
+    <p>Practice this: <strong id="practice-text">Hello, how are you today?</strong></p>
+    <button onclick="speakSentence()">🔊 Hear Sentence</button>
+    <button onclick="startListening()">🎤 Start Speaking</button>
+    <button onclick="nextSentence()">➡️ Next Sentence</button>
+    <button onclick="playUserVoice()">🔁 Replay My Voice</button>
+    <button onclick="startTimerChallenge()">⏰ 30s Challenge</button>
+    <p id="timer"></p>
+    <p id="result"></p>
+    <canvas id="scoreChart" width="350" height="200"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const sentences = {
+      general: ["Hello, how are you today?", "I love watching movies.", "Could you help me, please?", "She is reading a book."],
+      greetings: ["Good morning!", "How have you been?", "Nice to meet you.", "See you soon."],
+      travel: ["Where is the nearest hotel?", "I would like a taxi, please.", "What time is the next train?", "Can you show me the map?"],
+      food: ["I would like a burger.", "Do you have vegetarian options?", "The food is delicious.", "May I see the menu, please?"]
+    };
+
+    let currentCategory = "general";
+    let currentSentence = "";
+    let userVoiceBlob = null;
+    let score = 0, total = 0;
+    let chart;
+    let challengeTimer = null;
+    let timeLeft = 0;
+
+    function nextSentence() {
+      const catSentences = sentences[currentCategory];
+      currentSentence = catSentences[Math.floor(Math.random() * catSentences.length)];
+      document.getElementById("practice-text").innerText = currentSentence;
+      document.getElementById("result").innerText = "";
+    }
+
+    function changeCategory() {
+      currentCategory = document.getElementById("categorySelect").value;
+      nextSentence();
+    }
+
+    function speakSentence() {
+      const utterance = new SpeechSynthesisUtterance(currentSentence);
+      speechSynthesis.speak(utterance);
+    }
+
+    function startListening() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert("Your browser does not support speech recognition. Try Chrome.");
+        return;
+      }
+
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      const recorder = new MediaRecorder(window.stream);
+      const audioChunks = [];
+
+      recorder.ondataavailable = e => audioChunks.push(e.data);
+      recorder.onstop = () => {
+        userVoiceBlob = new Blob(audioChunks);
+      };
+
+      recognition.onstart = () => {
+        document.getElementById("result").innerText = "Listening...";
+        recorder.start();
+      };
+
+      recognition.onresult = function(event) {
+        const userSpeech = event.results[0][0].transcript;
+        total++;
+        document.getElementById("total").innerText = total;
+
+        if (userSpeech.toLowerCase() === currentSentence.toLowerCase()) {
+          score++;
+          document.getElementById("score").innerText = score;
+          document.getElementById("result").innerText = "✅ Great job! You said it correctly.";
+        } else {
+          document.getElementById("result").innerText = `❌ You said: "${userSpeech}"\nTry again.`;
+        }
+        updateChart();
+        recorder.stop();
+      };
+
+      recognition.onerror = function(event) {
+        document.getElementById("result").innerText = "Error occurred: " + event.error;
+      };
+
+      recognition.start();
+    }
+
+    function playUserVoice() {
+      if (userVoiceBlob) {
+        const audio = new Audio(URL.createObjectURL(userVoiceBlob));
+        audio.play();
+      } else {
+        alert("No voice recorded yet.");
+      }
+    }
+
+    function updateChart() {
+      if (!chart) {
+        const ctx = document.getElementById("scoreChart").getContext("2d");
+        chart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Correct', 'Incorrect'],
+            datasets: [{
+              data: [score, total - score],
+              backgroundColor: ['#4caf50', '#f44336']
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false
+          }
+        });
+      } else {
+        chart.data.datasets[0].data = [score, total - score];
+        chart.update();
+      }
+    }
+
+    function startTimerChallenge() {
+      timeLeft = 30;
+      document.getElementById("timer").innerText = `⏱️ Time left: ${timeLeft}s`;
+      clearInterval(challengeTimer);
+      nextSentence();
+      challengeTimer = setInterval(() => {
+        timeLeft--;
+        document.getElementById("timer").innerText = `⏱️ Time left: ${timeLeft}s`;
+        if (timeLeft <= 0) {
+          clearInterval(challengeTimer);
+          alert(`Challenge over! Your score: ${score}/${total}`);
+          timeLeft = 0;
+          document.getElementById("timer").innerText = "";
+        }
+      }, 1000);
+    }
+
+    // Request mic permissions once
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      window.stream = stream;
+    }).catch(err => alert("Microphone access denied."));
+
+    window.onload = () => {
+      nextSentence();
+      updateChart();
+    };
+  </script>
+</body>
+</html>
